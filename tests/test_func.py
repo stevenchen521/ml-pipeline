@@ -19,9 +19,7 @@ def test_log10():
 
    df_log10 = pipline2.fit_transform(df)
    df_log10_inv = pipline2.inverse_transform(df_log10)
-
    df_diff = df_log10_inv - df
-
    diff_round = np.round(df_diff, 5)
 
    assert np.count_nonzero(diff_round, axis=None) == 0
