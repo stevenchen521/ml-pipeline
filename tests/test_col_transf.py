@@ -4,6 +4,7 @@ from ..data_prep.col_transformer import DFColTransformer
 from ..data_prep.func_transformer import LogTransformer
 from sklearn.pipeline import Pipeline
 from pandas import read_csv, concat, DataFrame
+from pandas.core.series import Series
 import numpy as np
 from sklearn.model_selection import train_test_split
 
@@ -18,10 +19,10 @@ ROUND_SCALE = 8
 
 def n_zero_diff(a, b, round_scale=ROUND_SCALE):
     a_inner = a
-    if type(a) == DataFrame:
+    if type(a) == DataFrame or type(a) == Series:
         a_inner = a.to_numpy()
     b_inner = b
-    if type(b) == DataFrame:
+    if type(b) == DataFrame or type(b) == Series:
         b_inner = b.to_numpy()
 
     diff = a_inner - b_inner
@@ -34,6 +35,7 @@ class MyTestCase(unittest.TestCase):
     def setUp(self):
         current_dir = os.path.dirname(__file__)
         self.df_test = read_csv(f'{current_dir}/data/data_to_transform.csv')
+        self.df_test["id"] = self.df_test.index + 1
         print(f"Test data {self.df_test.columns.to_numpy()}")
 
     def test_mm_log_trans(self):
@@ -125,8 +127,8 @@ class MyTestCase(unittest.TestCase):
 
         # 2. test inverse transform
         df_res_inv = ct.inverse_transform(concat([df_res, df_test_inner[STD_COLS]], axis=1))
-        df_res_inv = df_res_inv[df_test_inner.columns]
-        assert n_zero_diff(df_test_inner, df_res_inv) == 0
+        # df_res_inv = df_res_inv[df_test_inner.columns]
+        assert n_zero_diff(df_test_inner[df_res_inv.columns], df_res_inv) == 0
 
     def test_col_verbose_feature_names_true(self):
         """
@@ -190,6 +192,7 @@ class MyTestCase(unittest.TestCase):
         ct = DFColTransformer(
             [
                 ("minMax_scaler", MinMaxScaler(), None),
+                ("", None, ["id"]),
                 ("mm_log_pipeline", Pipeline(steps=[('minMaxScaler', MinMaxScaler()), ('log_trans', LogTransformer())]),
                  MM_LOG_COLS),
             ],
@@ -206,6 +209,33 @@ class MyTestCase(unittest.TestCase):
 
         assert n_zero_diff(df_train_res_inv, df_train) == 0
         assert n_zero_diff(df_test_res_inv, df_test) == 0
+
+    def test_same(self):
+        df_inner = self.df_test.copy()
+        df_train, df_test = train_test_split(df_inner, test_size=0.3, shuffle=False)
+        print(f"train set shape is {df_train.shape}")
+        print(f"test set shape is {df_test.shape}")
+
+        ct = DFColTransformer(
+            [
+                ("minMax_scaler", MinMaxScaler(), None),
+                ("", None, "id"),
+                ("mm_log_pipeline", Pipeline(steps=[('minMaxScaler', MinMaxScaler()), ('log_trans', LogTransformer())]),
+                 MM_LOG_COLS),
+            ],
+            remainder="passthrough"
+        )
+
+        trans_pipline = Pipeline(steps=[('DFColTransformer', ct)])
+        trans_pipline.fit(df_train)
+        df_train_res = trans_pipline.transform(df_train)
+        df_res_res = trans_pipline.transform(df_test)
+
+        df_train_res_inv = trans_pipline.inverse_transform(df_train_res)
+        df_test_res_inv = trans_pipline.inverse_transform(df_res_res)
+
+        assert n_zero_diff(df_train_res_inv["id"], df_train["id"]) == 0
+        assert n_zero_diff(df_test_res_inv["id"], df_test["id"]) == 0
 
 
 if __name__ == '__main__':

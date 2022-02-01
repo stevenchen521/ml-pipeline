@@ -4,21 +4,46 @@ from sklearn.compose import ColumnTransformer
 
 def convert_transformers(transformers, columns):
     cols_t = []
+    cols_exc = []
     default_idx = None
+    exc_idx = None
     for idx, transformer in enumerate(transformers):
-        if transformer[2] is not None:
-            cols_t.extend(transformer[2])
-        else:
+        if transformer[2] is not None and transformer[1] is not None:
+            if type(transformer[2]) == str:
+                cols_t.append(transformer[2])
+            else:
+                cols_t.extend(transformer[2])
+        elif transformer[2] is None and transformer[1] is not None:
             default_idx = idx
-    if default_idx is None:
+
+    for idx, transformer in enumerate(transformers):
+        if transformer[1] is None:
+            if type(transformer[2]) == str:
+                cols_exc.append(transformer[2])
+            else:
+                cols_exc.extend(transformer[2])
+            exc_idx = idx
+
+    if default_idx is None and exc_idx is not None:
+        del transformers[exc_idx]
+        return transformers
+    elif default_idx is None:
         return transformers
 
     columns_list = columns.to_list()
+
+    # if default_idx is not None:
     for col in cols_t:
+        columns_list.remove(col)
+    for col in cols_exc:
         columns_list.remove(col)
     default_transformer = list(transformers[default_idx])
     default_transformer[2] = columns_list
     transformers[default_idx] = tuple(default_transformer)
+
+    if exc_idx is not None:
+        del transformers[exc_idx]
+
     return transformers
 
 
@@ -95,7 +120,7 @@ class DFColTransformer(ColumnTransformer):
                     if self.verbose_feature_names_out:
                         cols_t = [trans_inner_id + "__" + col_t for col_t in cols_t]
                     res_inner.loc[:, cols_t] = trans_inner.inverse_transform(Xt[cols_t])
-        if not self.verbose_feature_names_out:
+        if not self.verbose_feature_names_out and self.remainder != "drop":
             return res_inner[self.features]
         else:
             return res_inner
