@@ -35,7 +35,11 @@ class MyTestCase(unittest.TestCase):
     def setUp(self):
         current_dir = os.path.dirname(__file__)
         self.df_test = read_csv(f'{current_dir}/data/data_to_transform.csv')
+        cols = self.df_test.columns.to_numpy()
+        cols = np.concatenate([["id"], cols])
         self.df_test["id"] = self.df_test.index + 1
+        self.df_test = self.df_test[cols]
+
         print(f"Test data {self.df_test.columns.to_numpy()}")
 
     def test_mm_log_trans(self):
@@ -196,7 +200,8 @@ class MyTestCase(unittest.TestCase):
                 ("mm_log_pipeline", Pipeline(steps=[('minMaxScaler', MinMaxScaler()), ('log_trans', LogTransformer())]),
                  MM_LOG_COLS),
             ],
-            remainder="passthrough"
+            remainder="passthrough",
+            verbose_feature_names_out=False
         )
 
         trans_pipline = Pipeline(steps=[('DFColTransformer', ct)])

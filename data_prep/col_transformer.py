@@ -77,14 +77,34 @@ class DFColTransformer(ColumnTransformer):
         self.features = X.columns
         return super().fit(X, y=None)
 
+    # def transform(self, X):
+    #     if type(X) != DataFrame:
+    #         raise TypeError("Only DataFrame is accepted")
+    #     # self.transformers = convert_transformers(self.transformers, X.columns)
+    #     if type(X) == DataFrame:
+    #         return DataFrame(super().transform(X), columns=self.features)[self.features]
+    #     else:
+    #         return super().transform(X)
+
     def transform(self, X):
-        if type(X) != DataFrame:
-            raise TypeError("Only DataFrame is accepted")
-        self.transformers = convert_transformers(self.transformers, X.columns)
-        if type(X) == DataFrame:
-            return DataFrame(super().transform(X), columns=self.features)[self.features]
+        res_inner = X.copy()
+        for transformer in self.transformers_:
+            trans_inner_id = transformer[0]
+            trans_inner = transformer[1]
+            cols_t = transformer[2]
+            if type(X) == DataFrame:
+                if hasattr(trans_inner, 'transform'):
+                    # if self.remainder == "drop" and self.verbose_feature_names_out == True:
+                    res_inner.loc[:, cols_t] = trans_inner.transform(X[cols_t])
+                    if self.verbose_feature_names_out:  # rename column name
+                        # cols_t = [trans_inner_id + "__" + col_t for col_t in cols_t]
+                        for col in cols_t:
+                            res_inner.rename(columns={col: trans_inner_id + "__" + col}, inplace=True)
+
+        if not self.verbose_feature_names_out and self.remainder != "drop":
+            return res_inner[self.features]
         else:
-            return super().transform(X)
+            return res_inner
 
     def fit_transform(self, X, y=None):
         if type(X) != DataFrame:
