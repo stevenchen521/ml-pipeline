@@ -1,8 +1,8 @@
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from sklearn.compose import ColumnTransformer
 
 
-def convert_transformers(transformers, columns):
+def convert_transformers(transformers, columns_x, columns_y=None):
     cols_t = []
     cols_exc = []
     default_idx = None
@@ -24,19 +24,29 @@ def convert_transformers(transformers, columns):
                 cols_exc.extend(transformer[2])
             exc_idx = idx
 
+    # remove the label columns if they exist
+    if columns_y is not None:
+        for col in columns_y:
+            try:
+                cols_t.remove(col) if col in cols_t else None
+                cols_exc.remove(col) if col in cols_exc else None
+            except ValueError:
+                pass
+
     if default_idx is None and exc_idx is not None:
         del transformers[exc_idx]
         return transformers
     elif default_idx is None:
         return transformers
 
-    columns_list = columns.to_list()
+    columns_list = columns_x.to_list()
 
     # if default_idx is not None:
     for col in cols_t:
-        columns_list.remove(col)
+        columns_list.remove(col)  # if col in cols_t else None
     for col in cols_exc:
-        columns_list.remove(col)
+        columns_list.remove(col)  # if col in cols_t else None
+
     default_transformer = list(transformers[default_idx])
     default_transformer[2] = columns_list
     transformers[default_idx] = tuple(default_transformer)
@@ -73,7 +83,13 @@ class DFColTransformer(ColumnTransformer):
     def fit(self, X, y=None):
         if type(X) != DataFrame:
             raise TypeError("Only DataFrame is accepted")
-        self.transformers = convert_transformers(self.transformers, X.columns)
+        cols_y = None
+        if type(y) == Series:
+            cols_y = y.to_frame().columns if y is not None else None
+        elif y is not None:
+            cols_y = y.columns
+
+        self.transformers = convert_transformers(self.transformers, X.columns, cols_y)
         self.features = X.columns
         return super().fit(X, y=None)
 
@@ -109,7 +125,14 @@ class DFColTransformer(ColumnTransformer):
     def fit_transform(self, X, y=None):
         if type(X) != DataFrame:
             raise TypeError("Only DataFrame is accepted")
-        self.transformers = convert_transformers(self.transformers, X.columns)
+
+        cols_y = None
+        if type(y) == Series:
+            cols_y = y.to_frame().columns if y is not None else None
+        elif y is not None:
+            cols_y = y.columns
+
+        self.transformers = convert_transformers(self.transformers, X.columns, cols_y)
         fit_res = super().fit_transform(X, y)
         if type(X) == DataFrame:
             self.features = X.columns
@@ -127,7 +150,6 @@ class DFColTransformer(ColumnTransformer):
             return fit_res
 
     def inverse_transform(self, Xt):
-
         res_inner = Xt.copy()
 
         for transformer in self.transformers_:

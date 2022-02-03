@@ -36,8 +36,9 @@ class MyTestCase(unittest.TestCase):
         current_dir = os.path.dirname(__file__)
         self.df_test = read_csv(f'{current_dir}/data/data_to_transform.csv')
         cols = self.df_test.columns.to_numpy()
-        cols = np.concatenate([["id"], cols])
+        cols = np.concatenate([["id"], cols, ["label"]])
         self.df_test["id"] = self.df_test.index + 1
+        self.df_test["label"] = self.df_test.index + 2
         self.df_test = self.df_test[cols]
 
         print(f"Test data {self.df_test.columns.to_numpy()}")
@@ -234,13 +235,49 @@ class MyTestCase(unittest.TestCase):
         trans_pipline = Pipeline(steps=[('DFColTransformer', ct)])
         trans_pipline.fit(df_train)
         df_train_res = trans_pipline.transform(df_train)
-        df_res_res = trans_pipline.transform(df_test)
+        df_test_res = trans_pipline.transform(df_test)
 
         df_train_res_inv = trans_pipline.inverse_transform(df_train_res)
-        df_test_res_inv = trans_pipline.inverse_transform(df_res_res)
+        df_test_res_inv = trans_pipline.inverse_transform(df_test_res)
 
         assert n_zero_diff(df_train_res_inv["id"], df_train["id"]) == 0
         assert n_zero_diff(df_test_res_inv["id"], df_test["id"]) == 0
+
+    def test_fit_xy(self):
+        from xgboost import XGBClassifier
+        from sklearn.feature_selection import SelectFromModel
+
+        df_inner = self.df_test.iloc[0:10, :].copy()
+        df_train, df_test = train_test_split(df_inner, test_size=0.3, shuffle=False)
+        print(f"train set shape is {df_train.shape}")
+        print(f"test set shape is {df_test.shape}")
+        df_train_y = df_train.pop('label')
+        df_test_y = df_test.pop('label')
+        df_train_x = df_train
+        df_test_x = df_test
+        ct = DFColTransformer(
+            [
+                ("minMax_scaler", MinMaxScaler(), None),
+                ("", None, ["id", "label"]),
+                ("mm_log_pipeline", Pipeline(steps=[('minMaxScaler', MinMaxScaler()), ('log_trans', LogTransformer())]),
+                 MM_LOG_COLS),
+            ],
+            remainder="passthrough"
+        )
+        XGBClassifier()
+        pipline = Pipeline(steps=[('DFColTransformer', ct),
+                                  # ('', SelectFromModel(XGBClassifier()))
+                                  ])
+
+        pipline.fit(df_train_x, df_train_y)
+        df_train_res = pipline.transform(df_train)
+        df_test_res = pipline.transform(df_test)
+
+        df_train_res_inv = pipline.inverse_transform(df_train_res)
+        df_test_res_inv = pipline.inverse_transform(df_test_res)
+
+        assert n_zero_diff(df_train_x, df_train_res_inv) == 0
+        assert n_zero_diff(df_test_x, df_test_res_inv) == 0
 
 
 if __name__ == '__main__':
